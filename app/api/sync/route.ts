@@ -47,9 +47,11 @@ export async function GET(req: Request) {
       const r = await readTelegramChannel();
       (result.sources as Record<string, unknown>).mtproto = {
         ok: r.ok,
+        fetched: r.fetched,
         reason: r.reason,
         detail: r.detail,
       };
+      if (r.ok) toStore.push(...r.messages);
     }
 
     let inserted = 0;

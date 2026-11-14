@@ -124,6 +124,25 @@ RECONSTRUYEN de nota en nota:
   implementar con GramJS; si no hay sesión, el endpoint lo indica y NO inventa datos),
   t.me/s/elecpinar (canal viejo, solo semilla/demo, MARCAR fecha 2024 y «no vigente»),
   pegado manual (endpoint admin con secreto en env).
+- **BOT DE TELEGRAM PARA ENVIAR PARTES A MANO (añadido 14 nov, pedido de Johan):**
+  `POST /api/telegram/webhook` — Johan reenvía un parte del canal al bot (o pega su
+  texto) y la app se actualiza: mismo parseo que el canal, deduplicación por hash,
+  reconstrucción de estados, respuesta de confirmación. Verifica la cabecera
+  `x-telegram-bot-api-secret-token` (= `TELEGRAM_WEBHOOK_SECRET`) y solo acepta a los
+  ids de `TELEGRAM_ALLOWED_USER_IDS` (fail closed si está vacía). Comandos: /start
+  (ayuda), /estado (totales + último parte). Fecha del parte: `forward_date` si es
+  reenvío. Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`,
+  `TELEGRAM_ALLOWED_USER_IDS`. Puesta en marcha (Johan crea el bot en @BotFather;
+  el agente pone las vars en Vercel y hace setWebhook con el secreto). El pegado
+  manual por API (`POST /api/admin/pegar` con `ADMIN_SECRET`) sigue disponible.
+- **MTProto (revisado 14 nov, pedido de Johan):** lector REAL con teleproto (fork
+  mantenido de GramJS; `telegram` está archivado, no usar). `lib/mtproto.ts` lee los
+  últimos 40 mensajes de @EmpresaElectricaPROficial con `TELEGRAM_API_ID` /
+  `TELEGRAM_API_HASH` / `TELEGRAM_SESSION_STRING`, y `/api/sync` ya ingiere sus
+  mensajes igual que la semilla. Sin credenciales reporta `no_api_configured` o
+  `no_session_configured` y NO inventa datos. Falta: api_id/api_hash — reintento de
+  creación en my.telegram.org programado (cron `apagonpr-reintento-api-telegram`,
+  14 nov 23:49 UTC = 19:49 hora Cuba, una sola vez) y luego la sesión de usuario.
 - Verificación local: `TURSO_DATABASE_URL=file:./.dev.db` (libsql en archivo) cuando
   Vercel no responde (403 al equipo tecnobum) — mismo código y esquema; en
   producción valen las env vars de Turso del proyecto klick.

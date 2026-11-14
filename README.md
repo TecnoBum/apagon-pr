@@ -15,6 +15,17 @@ con y sin corriente por circuito, avisos push por circuito.
   (https://t.me/s/elecpinar) pero congelado en oct 2024: NOTAs 3–12 del
   12 oct 2024 + anuncio de migración. Todo lo que venga de ahí se marca
   `demo=1` y la UI lo rotula "Datos de demostración — no vigentes".
+- **Canal vivo:** lector MTProto real con teleproto (`lib/mtproto.ts`):
+  necesita `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` y
+  `TELEGRAM_SESSION_STRING` en Vercel; `/api/sync?source=mtproto` lee los
+  últimos 40 mensajes de @EmpresaElectricaPROficial. Sin sesión, el
+  endpoint lo dice y no inventa datos.
+- **Bot para enviar partes a mano:** crea el bot en @BotFather y pon en
+  Vercel `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (secreto del
+  webhook) y `TELEGRAM_ALLOWED_USER_IDS` (tu id numérico de Telegram,
+  lo da @userinfobot). Activa el webhook:
+  `curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook -d url=https://apagon-pr.vercel.app/api/telegram/webhook -d secret_token=<SECRETO>`.
+  Después basta reenviarle un parte del canal (o pegarle el texto).
 
 ## Modelo honesto de horas (la empresa NO publica horas por circuito)
 
@@ -56,6 +67,9 @@ metadatos. El esquema se crea solo al primer acceso (`ensureSchema()`).
 - `GET /api/sync?source=elecpinar|mtproto|all` — lee fuentes y reconstruye
   los periodos (también `POST /api/admin/pegar` con `ADMIN_SECRET` para
   pegar partes a mano).
+- `POST /api/telegram/webhook` — bot de Telegram: reenviar un parte del canal
+  (o pegar su texto) actualiza la app; verifica el secreto del webhook y solo
+  acepta a los usuarios de `TELEGRAM_ALLOWED_USER_IDS`. Comandos /start y /estado.
 - `GET /api/partes`, `GET /api/circuitos?q=`, `GET /api/circuito/[id]`.
 - `POST/DELETE /api/push/subscribe`, `GET /api/push/check` (objetivo de cron).
 

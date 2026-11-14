@@ -63,11 +63,20 @@ function extractCodesWithZona(section: string): {
     if (!m) continue;
     const code = (m[1] + m[2]).toUpperCase();
     if (!codes.includes(code)) codes.push(code);
-    const zona = m[3]
+    // Si el resto es una lista separada por "/", la zona del primer
+    // código es solo lo que hay antes de la primera barra (o nada).
+    const restBeforeSlash = m[3].split("/")[0];
+    const zona = restBeforeSlash
       .replace(/^[\s:,\-.]+/, "")
       .replace(/[\s.]+$/, "")
       .trim();
     if (zona && !zonas[code]) zonas[code] = zona;
+    // La lista a veces viene en UNA sola línea separada por "/"
+    // ("P 916 / PD 1082 / PD 100"): recoger también los códigos
+    // que siguen al primero en la misma línea.
+    for (const extra of extractCodes(m[3])) {
+      if (!codes.includes(extra)) codes.push(extra);
+    }
   }
   return { codes, zonas };
 }

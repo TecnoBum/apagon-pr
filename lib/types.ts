@@ -35,7 +35,7 @@ export type ParsedMessage = {
 
 export type StoredMessage = {
   id: string;
-  source: "telegramian" | "elecpinar" | "mtproto" | "manual";
+  source: "telegramian" | "elecpinar" | "mtproto" | "manual" | "telegram-bot";
   externalId: string;
   /** ISO UTC. */
   postedAt: string;
