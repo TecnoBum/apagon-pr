@@ -13,7 +13,14 @@ export async function GET(req: Request) {
   } catch (e) {
     const blocked = isBlockedError(e);
     return NextResponse.json(
-      { ok: false, error: blocked ? "almacenamiento_bloqueado" : "read_failed" },
+      {
+        ok: false,
+        error: blocked
+          ? "almacenamiento_bloqueado"
+          : e instanceof Error
+            ? e.message
+            : "read_failed",
+      },
       { status: blocked ? 503 : 500 }
     );
   }

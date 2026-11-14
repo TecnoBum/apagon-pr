@@ -18,8 +18,10 @@ let client: Client | null = null;
 
 export function getClient(): Client {
   if (client) return client;
-  const url = process.env.TURSO_DATABASE_URL || "";
-  const authToken = process.env.TURSO_AUTH_TOKEN || "";
+  // Recortar: un espacio o salto de línea al copiar el valor desde el panel
+  // de Vercel rompe la autenticación con Turso (HTTP 400).
+  const url = (process.env.TURSO_DATABASE_URL || "").trim();
+  const authToken = (process.env.TURSO_AUTH_TOKEN || "").trim();
   // Las bases locales file: no necesitan token; las remotas (libsql://) sí.
   if (!url || (!authToken && !url.startsWith("file:"))) {
     throw new Error("backend no configurado");
