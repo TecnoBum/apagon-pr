@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { StoredMessage } from "@/lib/types";
 import {
   ensureSchema,
   insertMessage,
@@ -59,7 +60,42 @@ export async function GET(req: Request) {
       if ((await insertMessage(m)) === "inserted") inserted++;
     }
 
-    const all = await listMessagesAsc();
+    // Lectura para la reconstrucción: OJO (lección 14 nov 2026, 21:30) —
+    // la lectura DIRECTA (listMessagesAsc) ve una copia ATRASADA de la
+    // réplica Turso (55 mensajes, solo demo) aunque las escrituras ya
+    // están en el primario: el 2º sync abortó con UNIQUE y los reintentos
+    // seguían viendo 55, mientras /api/partes (otra ruta, otra conexión)
+    // ve los 91 reales. Por eso la reconstrucción se alimenta de la lista
+    // que devuelve el propio /api/partes (limit 200; hoy hay 91) y solo
+    // cae a la lectura directa si esa no trae los mensajes recién
+    // insertados. Límite conocido: si la tabla pasa de 200 mensajes, el
+    // rebuild truncaría historia vieja — revisar entonces (o arreglar la
+    // réplica en el panel de Turso).
+    let all = await listMessagesAsc();
+    let readSource = "direct";
+    try {
+      const base = new URL(req.url).origin;
+      const res = await fetch(`${base}/api/partes?limit=200`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        messages?: StoredMessage[];
+      };
+      if (
+        res.ok &&
+        data?.ok &&
+        Array.isArray(data.messages) &&
+        data.messages.length >= all.length &&
+        toStore.every((m) => data.messages!.some((x) => x.id === m.id))
+      ) {
+        all = [...data.messages].reverse();
+        readSource = "partes";
+      }
+    } catch {
+      // Sin la lista de /api/partes, se reconstruye con la lectura directa.
+    }
+
     const states = reconstructStates(all);
     await rebuildStates(states);
     await refreshCircuits(all);
@@ -68,6 +104,7 @@ export async function GET(req: Request) {
     result.inserted = inserted;
     result.total = all.length;
     result.states = states.length;
+    result.read_source = readSource;
     return NextResponse.json(result);
   } catch (e) {
     const blocked = isBlockedError(e);
