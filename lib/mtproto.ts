@@ -39,7 +39,18 @@ function isServiceMessage(text: string): boolean {
 export async function readTelegramChannel(): Promise<MtprotoResult> {
   const apiId = Number(process.env.TELEGRAM_API_ID || 0);
   const apiHash = (process.env.TELEGRAM_API_HASH || "").trim();
-  const sessionString = (process.env.TELEGRAM_SESSION_STRING || "").trim();
+  // Sesión: variable de entorno, o la guardada en apagonpr_meta por
+  // /api/admin/mtproto-login (la VM de desarrollo no puede crearla:
+  // el handshake MTProto se corta al escribir).
+  let sessionString = (process.env.TELEGRAM_SESSION_STRING || "").trim();
+  if (!sessionString) {
+    try {
+      const { getMeta } = await import("./turso");
+      sessionString = ((await getMeta("mtproto_session")) || "").trim();
+    } catch {
+      sessionString = "";
+    }
+  }
   if (!apiId || !apiHash) {
     return {
       ok: false,
@@ -56,7 +67,7 @@ export async function readTelegramChannel(): Promise<MtprotoResult> {
       fetched: 0,
       reason: "no_session_configured",
       detail:
-        "No hay sesión de Telegram configurada. El lector en vivo necesita TELEGRAM_SESSION_STRING. Sin sesión no se leen mensajes del canal.",
+        "No hay sesión de Telegram configurada. El lector en vivo necesita una sesión (crearla en /api/admin/mtproto-login). Sin sesión no se leen mensajes del canal.",
       messages: [],
     };
   }
