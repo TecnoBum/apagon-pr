@@ -259,9 +259,20 @@ export async function getAllCircuitSummaries(
   const r = await db.execute(
     "SELECT code FROM apagonpr_circuits ORDER BY code ASC"
   );
+  const codes = new Set<string>(r.rows.map((row) => String(row.code)));
+  // Respaldo: si el catálogo está vacío (p. ej. tras un sync que no lo
+  // repobló), derivar los códigos de los propios mensajes, que sí están.
+  // Verificado en vivo 14 nov 2026: /api/circuitos devolvía 0 con la tabla
+  // vacía aunque los mensajes estaban cargados.
+  if (!codes.size) {
+    for (const m of messages) {
+      for (const c of [...m.afectados, ...m.restablecidos, ...m.averiaCircuitos])
+        codes.add(c);
+    }
+  }
   const out: CircuitSummary[] = [];
-  for (const row of r.rows) {
-    const s = await getCircuitSummary(String(row.code), messages);
+  for (const code of [...codes].sort()) {
+    const s = await getCircuitSummary(code, messages);
     if (s) out.push(s);
   }
   return out;

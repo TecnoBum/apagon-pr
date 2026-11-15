@@ -31,15 +31,6 @@ export default async function PartesPage() {
         </div>
       )}
 
-      {messages.length === 0 && !error && (
-        <div className="ap-card p-5 text-center">
-          <p className="font-bold">No hay partes todavía</p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-            Vuelve al inicio y carga la semilla de demostración.
-          </p>
-        </div>
-      )}
-
       {messages.map((m) => (
         <ParteCard key={m.id} m={m} />
       ))}

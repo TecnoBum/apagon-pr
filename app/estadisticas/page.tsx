@@ -85,14 +85,7 @@ export default async function EstadisticasPage() {
         </div>
       )}
 
-      {messages.length === 0 && !error ? (
-        <div className="ap-card p-5 text-center">
-          <p className="font-bold">No hay datos todavía</p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-            Vuelve al inicio y carga la semilla de demostración.
-          </p>
-        </div>
-      ) : (
+      {!error && (
         <>
           <section className="grid grid-cols-2 gap-2">
             <div className="ap-card p-3 text-center">

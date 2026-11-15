@@ -10,7 +10,6 @@ import {
 import { fmtFecha, fmtFechaHora, formatHours, hace } from "@/lib/format";
 import CircuitCard from "@/components/CircuitCard";
 import ParteCard from "@/components/ParteCard";
-import SyncButton from "@/components/SyncButton";
 import {
   IconAlert,
   IconBolt,
@@ -106,17 +105,6 @@ export default async function Home() {
             El lector en vivo del canal oficial está pendiente. El histórico y
             las horas se calculan igual que con datos en vivo.
           </p>
-        </div>
-      )}
-
-      {messages.length === 0 && !dbError && (
-        <div className="ap-card p-5 text-center">
-          <p className="font-bold text-lg">Todavía no hay partes cargados</p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 mb-4">
-            Carga la semilla de demostración (partes reales del 12 oct 2024 del
-            canal viejo) para ver la app funcionando.
-          </p>
-          <SyncButton />
         </div>
       )}
 

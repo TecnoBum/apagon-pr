@@ -209,19 +209,23 @@ export async function insertMessage(
 
 export async function listMessages(limit = 100): Promise<StoredMessage[]> {
   const db = getClient();
-  const r = await db.execute({
-    sql: "SELECT * FROM apagonpr_messages ORDER BY posted_at DESC LIMIT ?",
-    args: [limit],
-  });
+  // El LIMIT va interpolado (entero ya validado), no como parámetro: en el
+  // cliente remoto de Turso el `LIMIT ?` ligado devolvía 0 filas justo con
+  // limit=50 (el valor por defecto de /api/partes), mientras que 49/51/100
+  // funcionaban. Verificado en vivo 14 nov 2026.
+  const n = Math.max(1, Math.min(5000, Math.floor(limit) || 100));
+  const r = await db.execute(
+    `SELECT * FROM apagonpr_messages ORDER BY posted_at DESC LIMIT ${n}`
+  );
   return r.rows.map((row) => rowToMessage(row as unknown as Record<string, unknown>));
 }
 
 export async function listMessagesAsc(limit = 5000): Promise<StoredMessage[]> {
   const db = getClient();
-  const r = await db.execute({
-    sql: "SELECT * FROM apagonpr_messages ORDER BY posted_at ASC LIMIT ?",
-    args: [limit],
-  });
+  const n = Math.max(1, Math.min(5000, Math.floor(limit) || 5000));
+  const r = await db.execute(
+    `SELECT * FROM apagonpr_messages ORDER BY posted_at ASC LIMIT ${n}`
+  );
   return r.rows.map((row) => rowToMessage(row as unknown as Record<string, unknown>));
 }
 
