@@ -205,7 +205,36 @@ export async function insertMessage(
       Date.now(),
     ],
   });
-  return r.rowsAffected > 0 ? "inserted" : "exists";
+  if (r.rowsAffected > 0) return "inserted";
+  // Ya existía: refrescar el PARSEO guardado. El parser mejora con el
+  // tiempo y las filas viejas quedan con el parseo antiguo (caso real
+  // 14 nov 2026: los 36 partes MTProto quedaron con kind "otro" y
+  // afectados vacíos porque el parser no conocía el formato vivo).
+  // Solo se tocan las columnas del parseo; id/fuente/texto/hora no cambian.
+  await db.execute({
+    sql: `UPDATE apagonpr_messages SET
+      kind = ?, nota_num = ?, deficit_mw = ?, bloques = ?,
+      has_afectados_section = ?, afectados = ?, restablecidos = ?,
+      averia_circuitos = ?, averia_restablecido = ?, zonas = ?,
+      municipio = ?, parsed_ok = ?
+      WHERE id = ?`,
+    args: [
+      msg.kind,
+      msg.notaNum,
+      msg.deficitMw,
+      msg.bloques,
+      msg.hasAfetadosSection ? 1 : 0,
+      JSON.stringify(msg.afectados),
+      JSON.stringify(msg.restablecidos),
+      JSON.stringify(msg.averiaCircuitos),
+      msg.averiaRestablecido,
+      JSON.stringify(msg.zonas),
+      msg.municipio,
+      msg.parsedOk,
+      msg.id,
+    ],
+  });
+  return "exists";
 }
 
 export async function listMessages(limit = 100): Promise<StoredMessage[]> {

@@ -87,7 +87,7 @@ function sectionAfter(text: string, headerRe: RegExp): string | null {
   if (!m || m.index === undefined) return null;
   const rest = text.slice(m.index + m[0].length);
   // Cortar ante la próxima sección conocida o el pie del mensaje.
-  const cut = rest.search(/\n\s*(📌|💡|⚠|🔰|❗|📍|Equipo de Atención)/);
+  const cut = rest.search(/\n\s*(📌|💡|⚠|🔰|❗|📍|⚡|🛠|_{4,}|Equipo de Atención)/);
   return cut >= 0 ? rest.slice(0, cut) : rest;
 }
 
@@ -107,7 +107,18 @@ export function parseMessage(rawText: string): ParsedMessage {
     municipio: null,
   };
 
-  const isNota = /Actualización del SEN|NOTA\s*\d+/i.test(text);
+  // Formato VIVO (14 nov 2026, canal @EmpresaElectricaPROficial): "Nota:
+  // 17", "Actualización energética provincial", "Circuitos afectados por
+  // déficit:" y "Circuitos con servicio:" (estos últimos = restablecidos,
+  // con servicio ahora). Una nota puede traer SOLO la lista de afectados
+  // (sin "Nota:" en el texto): la cabecera de la lista también la delata.
+  const hasAfHeader =
+    /Circuitos?\s+Afectados?\s*(por\s+d[eé]ficit)?\s*:/i.test(text);
+  const hasServicioHeader = /Circuitos?\s+con\s+servicio\s*:/i.test(text);
+  const isNota =
+    /Actualización del SEN|Actualización energética|NOTA\s*:?\s*\d+/i.test(
+      text
+    ) || hasAfHeader || hasServicioHeader;
   // Avería SOLO si nombra un circuito ("Circuito: ..."). Un resumen que
   // mencione "las averías" en prosa (p. ej. la Nota informativa diaria)
   // NO es una avería: antes caía aquí y el fallback extraía códigos
@@ -132,21 +143,26 @@ export function parseMessage(rawText: string): ParsedMessage {
   const out: ParsedMessage = { ...empty, kind };
 
   if (kind === "nota") {
-    const nota = text.match(/NOTA\s*(\d+)/i);
+    const nota = text.match(/NOTA\s*:?\s*(\d+)/i);
     out.notaNum = nota ? parseInt(nota[1], 10) : null;
     const def = text.match(/Déficit(?:\s+de\s+Generación)?\s*:\s*(\d+)\s*MW/i);
     out.deficitMw = def ? parseInt(def[1], 10) : null;
     const blq = text.match(/Bloque Afectado\s*:\s*([^\n]+)/i);
     out.bloques = blq ? blq[1].replace(/\s+/g, " ").trim() : null;
 
-    const af = sectionAfter(text, /Circuitos?\s+Afectados?\s*:/i);
+    const af = sectionAfter(
+      text,
+      /Circuitos?\s+Afectados?\s*(por\s+d[eé]ficit)?\s*:/i
+    );
     out.hasAfetadosSection = af !== null;
     if (af !== null) {
       const r = extractCodesWithZona(af);
       out.afectados = r.codes;
       Object.assign(out.zonas, r.zonas);
     }
-    const rs = sectionAfter(text, /Circuitos?\s+Restablecidos?\s*:/i);
+    const rs =
+      sectionAfter(text, /Circuitos?\s+Restablecidos?\s*:/i) ??
+      sectionAfter(text, /Circuitos?\s+con\s+servicio\s*:/i);
     if (rs !== null) {
       out.restablecidos = extractCodes(rs);
     }
