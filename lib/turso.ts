@@ -170,17 +170,18 @@ export async function insertMessage(
   msg: StoredMessage
 ): Promise<"inserted" | "exists"> {
   const db = getClient();
-  const existing = await db.execute({
-    sql: "SELECT id FROM apagonpr_messages WHERE id = ?",
-    args: [msg.id],
-  });
-  if (existing.rows.length) return "exists";
-  await db.execute({
+  // Inserción ATÓMICA: el SELECT-then-INSERT anterior fallaba cuando dos
+  // invocaciones serverless corrían seguidas — la lectura (réplica Turso)
+  // no veía la fila recién insertada y el INSERT chocaba con UNIQUE
+  // (caso real 14 nov 2026: el 2º /api/sync abortó antes de reconstruir
+  // los estados). ON CONFLICT DO NOTHING + rowsAffected lo resuelve.
+  const r = await db.execute({
     sql: `INSERT INTO apagonpr_messages
       (id, source, external_id, posted_at, posted_at_inferred, demo, kind,
        nota_num, deficit_mw, bloques, has_afectados_section, raw_text, afectados, restablecidos,
        averia_circuitos, averia_restablecido, zonas, municipio, parsed_ok, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO NOTHING`,
     args: [
       msg.id,
       msg.source,
@@ -204,7 +205,7 @@ export async function insertMessage(
       Date.now(),
     ],
   });
-  return "inserted";
+  return r.rowsAffected > 0 ? "inserted" : "exists";
 }
 
 export async function listMessages(limit = 100): Promise<StoredMessage[]> {
