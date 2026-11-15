@@ -75,7 +75,12 @@ export async function POST(req: Request) {
         await setMeta("mtproto_code_at", new Date().toISOString());
         // El código queda registrado en el DC al que se conectó este cliente;
         // el confirm debe usar el MISMO DC o Telegram dice "expired".
+        // OJO (lección 21:05): _initSession() IGNORA el dcId si la dirección
+        // está vacía y pone el DC por defecto (PROD_DEFAULT_DC_ID = 2).
+        // Por eso se guarda también la dirección IP y el puerto del DC.
         await setMeta("mtproto_dc", String(client.session.dcId || 0));
+        await setMeta("mtproto_dc_addr", String(client.session.serverAddress || ""));
+        await setMeta("mtproto_dc_port", String(client.session.port || 443));
         return NextResponse.json({ ok: true, step: "code_waiting" });
       } finally {
         try {
@@ -102,8 +107,14 @@ export async function POST(req: Request) {
       // Anclar el confirm al mismo DC que usó el start (guardado en meta);
       // sin esto, cada cliente puede caer en un DC distinto y el hash del
       // código no existe ahí (Telegram responde "phone code expired").
+      // La dirección IP es OBLIGATORIA: con "" _initSession() la ignora y
+      // reconecta al DC por defecto (2), aunque el dcId diga 1.
       const storedDc = Number((await getMeta("mtproto_dc")) || 0);
-      if (storedDc > 0) {
+      const storedAddr = (await getMeta("mtproto_dc_addr")) || "";
+      const storedPort = Number((await getMeta("mtproto_dc_port")) || 443);
+      if (storedDc > 0 && storedAddr) {
+        session.setDC(storedDc, storedAddr, storedPort);
+      } else if (storedDc > 0) {
         session.setDC(storedDc, "", 443);
       }
       try {
