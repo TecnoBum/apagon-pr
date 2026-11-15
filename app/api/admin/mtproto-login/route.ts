@@ -17,7 +17,11 @@ export const dynamic = "force-dynamic";
  *   phoneCodeHash en apagonpr_meta. No devuelve nada sensible.
  * - confirm: completa el inicio con el código y guarda la sesión
  *   (StringSession) en apagonpr_meta (clave mtproto_session). La sesión
- *   NUNCA se devuelve en la respuesta.
+ *   NUNCA se devuelve en la respuesta. Si la cuenta tiene verificación en
+ *   dos pasos, devuelve { step: "password_needed" } y el inicio se
+ *   completa con la acción "password".
+ * - password: segundo paso (contraseña 2FA). Usa la sesión pendiente del
+ *   start; la contraseña se usa solo para el cálculo SRP y nunca se guarda.
  * - status: indica si hay api configurada y sesión guardada (sin valores).
  * El secreto es ADMIN_SECRET (igual que /api/admin/pegar). El lector
  * (lib/mtproto.ts) usa la sesión de meta si no hay
@@ -142,10 +146,49 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, step: "done" });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "";
-        if (/SESSION_PASSWORD_NEEDED/i.test(msg)) {
+        // teleproto devuelve "2FA is enabled, use a password to login."
+        // (no el SESSION_PASSWORD_NEEDED clásico) cuando la cuenta tiene
+        // verificación en dos pasos.
+        if (/SESSION_PASSWORD_NEEDED|2FA is enabled/i.test(msg)) {
           return NextResponse.json({ ok: true, step: "password_needed" });
         }
         throw e;
+      } finally {
+        try {
+          await client.disconnect();
+        } catch {}
+      }
+    }
+
+    if (action === "password") {
+      // Segundo paso del inicio: la contraseña de verificación en dos
+      // pasos de Telegram. Usa la sesión pendiente del start (la misma
+      // auth key que pidió el código y que ya lo aceptó). La contraseña se
+      // usa solo para el cálculo SRP y NUNCA se guarda en ningún sitio.
+      const password = String(body?.password || "");
+      if (!password) {
+        return NextResponse.json({ ok: false, error: "contrasena_vacia" }, { status: 400 });
+      }
+      const pendingSessionStr = (await getMeta("mtproto_pending_session")) || "";
+      if (!pendingSessionStr) {
+        return NextResponse.json({ ok: false, error: "sin_sesion_pendiente" }, { status: 400 });
+      }
+      const { Api } = await import("teleproto");
+      const { computeCheck } = await import("teleproto/Password");
+      const session = new StringSession(pendingSessionStr);
+      const client = new TelegramClient(session, apiId, apiHash, {
+        connectionRetries: 2,
+      });
+      try {
+        await client.connect();
+        const srp = await client.invoke(new Api.account.GetPassword());
+        const check = await computeCheck(srp, password);
+        await client.invoke(new Api.auth.CheckPassword({ password: check }));
+        const session = client.session.save();
+        await setMeta("mtproto_session", session);
+        await setMeta("mtproto_pending_session", "");
+        await setMeta("mtproto_code_hash", "");
+        return NextResponse.json({ ok: true, step: "done" });
       } finally {
         try {
           await client.disconnect();
