@@ -41,10 +41,18 @@ export async function POST(req: Request) {
     if (action === "status") {
       const envSession = (process.env.TELEGRAM_SESSION_STRING || "").trim();
       const metaSession = (await getMeta("mtproto_session")) || "";
+      const phoneStored = (await getMeta("mtproto_phone")) || "";
+      const codeAt = (await getMeta("mtproto_code_at")) || "";
+      const hash = (await getMeta("mtproto_code_hash")) || "";
+      const dcStored = (await getMeta("mtproto_dc")) || "";
       return NextResponse.json({
         ok: true,
         api: true,
         session: Boolean(envSession || metaSession),
+        phone_last4: phoneStored ? phoneStored.slice(-4) : "",
+        code_at: codeAt,
+        hash_len: hash.length,
+        dc: dcStored,
       });
     }
 
@@ -65,6 +73,9 @@ export async function POST(req: Request) {
         await setMeta("mtproto_phone", phone);
         await setMeta("mtproto_code_hash", String(sent.phoneCodeHash || ""));
         await setMeta("mtproto_code_at", new Date().toISOString());
+        // El código queda registrado en el DC al que se conectó este cliente;
+        // el confirm debe usar el MISMO DC o Telegram dice "expired".
+        await setMeta("mtproto_dc", String(client.session.dcId || 0));
         return NextResponse.json({ ok: true, step: "code_waiting" });
       } finally {
         try {
@@ -84,9 +95,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "sin_codigo_pendiente" }, { status: 400 });
       }
       const { Api } = await import("teleproto");
-      const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+      const session = new StringSession("");
+      const client = new TelegramClient(session, apiId, apiHash, {
         connectionRetries: 2,
       });
+      // Anclar el confirm al mismo DC que usó el start (guardado en meta);
+      // sin esto, cada cliente puede caer en un DC distinto y el hash del
+      // código no existe ahí (Telegram responde "phone code expired").
+      const storedDc = Number((await getMeta("mtproto_dc")) || 0);
+      if (storedDc > 0) {
+        session.setDC(storedDc, "", 443);
+      }
       try {
         await client.connect();
         await client.invoke(
