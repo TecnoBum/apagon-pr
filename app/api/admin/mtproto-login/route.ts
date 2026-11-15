@@ -81,6 +81,17 @@ export async function POST(req: Request) {
         await setMeta("mtproto_dc", String(client.session.dcId || 0));
         await setMeta("mtproto_dc_addr", String(client.session.serverAddress || ""));
         await setMeta("mtproto_dc_port", String(client.session.port || 443));
+        // CLAVE (lección 21:15): el código que Telegram emite queda ligado
+        // a la CLAVE DE AUTORIZACIÓN del cliente que lo pidió. El confirm
+        // debe reutilizar LA MISMA sesión (misma auth key), no una vacía:
+        // con otra auth key Telegram no reconoce el hash y dice "expired"
+        // para cualquier código, real o inventado. La sesión pendiente se
+        // guarda en meta (igual que la sesión final); nunca se devuelve.
+        const pendingSession = client.session.save();
+        if (!pendingSession) {
+          return NextResponse.json({ ok: false, error: "sin_sesion_pendiente" }, { status: 500 });
+        }
+        await setMeta("mtproto_pending_session", pendingSession);
         return NextResponse.json({ ok: true, step: "code_waiting" });
       } finally {
         try {
@@ -100,22 +111,24 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "sin_codigo_pendiente" }, { status: 400 });
       }
       const { Api } = await import("teleproto");
-      const session = new StringSession("");
+      // Reutilizar la sesión del start (misma auth key que pidió el código).
+      // Sin ella, Telegram no reconoce el hash ("expired" para todo código).
+      const pendingSessionStr = (await getMeta("mtproto_pending_session")) || "";
+      const session = new StringSession(pendingSessionStr);
       const client = new TelegramClient(session, apiId, apiHash, {
         connectionRetries: 2,
       });
-      // Anclar el confirm al mismo DC que usó el start (guardado en meta);
-      // sin esto, cada cliente puede caer en un DC distinto y el hash del
-      // código no existe ahí (Telegram responde "phone code expired").
-      // La dirección IP es OBLIGATORIA: con "" _initSession() la ignora y
-      // reconecta al DC por defecto (2), aunque el dcId diga 1.
-      const storedDc = Number((await getMeta("mtproto_dc")) || 0);
-      const storedAddr = (await getMeta("mtproto_dc_addr")) || "";
-      const storedPort = Number((await getMeta("mtproto_dc_port")) || 443);
-      if (storedDc > 0 && storedAddr) {
-        session.setDC(storedDc, storedAddr, storedPort);
-      } else if (storedDc > 0) {
-        session.setDC(storedDc, "", 443);
+      if (!pendingSessionStr) {
+        // Compatibilidad con starts viejos (sin sesión guardada): anclar
+        // al DC guardado con su dirección IP real (ver lección v3).
+        const storedDc = Number((await getMeta("mtproto_dc")) || 0);
+        const storedAddr = (await getMeta("mtproto_dc_addr")) || "";
+        const storedPort = Number((await getMeta("mtproto_dc_port")) || 443);
+        if (storedDc > 0 && storedAddr) {
+          session.setDC(storedDc, storedAddr, storedPort);
+        } else if (storedDc > 0) {
+          session.setDC(storedDc, "", 443);
+        }
       }
       try {
         await client.connect();
@@ -124,6 +137,7 @@ export async function POST(req: Request) {
         );
         const session = client.session.save();
         await setMeta("mtproto_session", session);
+        await setMeta("mtproto_pending_session", "");
         await setMeta("mtproto_code_hash", "");
         return NextResponse.json({ ok: true, step: "done" });
       } catch (e) {
